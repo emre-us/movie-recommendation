@@ -7,7 +7,10 @@ We will use the following libraries for this project:
 
 ```{r}
 library(tidyverse) # for tidy data
+library(gridExtra) # to plot graphs in a grid, or next to each other
 library(dplyr) # for data manipulation
+library(ggplot2) #for visualisations
+library(caret) # for ML, resampling and model training
 
 library(dslabs) # for the movielens data
 data("movielens") # load-up the movielens data
@@ -57,5 +60,86 @@ tab <- movielens %>%
   pivot_wider(names_from = title, 
               values_from = rating) #if we don't use pivot_wider() function (this function supersedes spread() function that was previously used) from the tidyr package the resulting matrix will have the same output format as movielens - ie, each row represents one rating given by one user to one movie. This means, without pivot_wider, rows would list users and their ratings for each movie before doing the same for the next user and so on. 
 tab
+```
+
+As can be seen there are NAs present.
+
+The task of recommendation system can be thought of as filling in the NAs in this matrix. We can also visualise where NAs are in the matrix. Lets try a visualisation for a random sample of 100 movies and 100 users:
+
+```{r}
+#randomly select 100 users
+
+users <- sample(unique(movielens$userId), 100)
+
+movielens %>%
+  filter(userId %in% users) %>%
+  select (userId, movieId, rating) %>%
+  mutate(rating = 1) %>% #changes all the assigned ratings to 1. Choice of 1 is arbitrary so long as long as they are uniform so that the image can show the contrast between NAs and those that received a rating of any value.
+  pivot_wider(names_from = movieId, values_from = rating) %>%
+  select(sample(ncol(.), 100)) %>%
+  as.matrix() %>%
+  t(.) %>% # this transposes the matrix so that movieIds are the rows and users are the columns
+  image(1:100, 1:100, . , xlab = "Movies", ylab = "Users")
+```
+
+
+Now we can start trying to make some predictions.
+
+There are some complications that need to be expressed from the outset. Note that each outcome Y has a different set of predictors. In other words, to predict rating for movie i by user u, in principle we should be able to use as predictors all other ratings related to movie i and by user u. However, the complicating issue is that different users rate different movies, and they rate different number of movies. It may also be the case that we may be able to see info from other movies that we determine to be similar to movie i, or from users determined to be similar to user u. In essence, the entire matrix can be used as predictors for each cell.
+
+Lets look at some of the general properties of the data to better understand the challenges.
+
+We would expect some movies to get rated a lot more than some others - think of a blockbuster vs some obscure movie. We would also expect some users to be more active in rating movies than others. We can check these with histograms:
+
+```{r}
+# Histogram for movies assigned to p1
+p1 <- movielens %>%
+  count(movieId) %>%
+  ggplot(aes(n)) +
+  geom_histogram(bins = 30,
+                 colour = "black") +
+  scale_x_log10() +
+  ggtitle("Movies")
+
+#Histogram for users assigned to p2
+p2 <- movielens %>%
+  count(userId) %>%
+  ggplot(aes(n)) +
+  geom_histogram(bins = 30,
+                 colour = "black") +
+  scale_x_log10() +
+  ggtitle("Users")
+
+#arrange p1 and p2 in grid formation
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Our expectations are confirmed - some movies receive a lot more ratings, and some users are a lot more active than the others.
+
+Our main goal is to build an algorithm with data we have collected that will then be applied outside our control - movie recommendations for users.
+
+As a 1st step, lets create a test set to assess the accuracy of the models we implement.
+
+```{r}
+set.seed(755) #for reproduceability
+
+#1st step:use createDataPartition from caret package to partition the ratings
+test_index <- createDataPartition(y = movielens$rating,
+                                  times = 1,
+                                  p = 0.2,
+                                  list = FALSE)
+
+#2nd step: assign the partitioned data to training and test sets
+train_set <- movielens[-test_index, ]
+test_set <- movielens[test_index, ]
+```
+
+If we leave it like this, then there is a chance that some users and movies that are in the training set are not in the test set and vice versa. Since that would not be helpful for our predictions, we need to remove those entries using the semi_join function:
+
+```{r}
+test_set <- test_set %>%
+  semi_join(train_set, by = "movieId") %>%
+  semi_join(train_set, by = "userId")
+
 ```
 
