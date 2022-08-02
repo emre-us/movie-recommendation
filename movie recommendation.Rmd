@@ -1,0 +1,61 @@
+---
+title: "Movie Recommendation"
+output: html_notebook
+---
+
+We will use the following libraries for this project:
+
+```{r}
+library(tidyverse) # for tidy data
+library(dplyr) # for data manipulation
+
+library(dslabs) # for the movielens data
+data("movielens") # load-up the movielens data
+```
+
+Next, carry out preliminary examination of the data:
+
+```{r}
+dim(movielens)
+```
+
+This dataset has 100,004 rows and 7 columns.
+
+```{r}
+head(movielens)
+```
+
+The table is in a tidy format with each row representing a rating given by one user to one movie. 
+
+Lets check how many users have provided ratings and how many movies were rated:
+
+```{r}
+#create a table summarising the total numbers of users and movies. Use the n_distinct() function and not count() as the latter will only give the number of times that user has given a rating.
+movielens %>% summarise(n_users = n_distinct(userId),
+                        n_movies = n_distinct(movieId))
+```
+So there are 671 users and 9066 movies. This does not add-up. 671 x 9066 = 6,083,286. Yet there are only 100,004 rows. The only explanation is that not every user rated every movie. 
+
+Since that is the case, if we imagine a matrix where rows are users and columns are movies (or vice versa) there would be a lot of empty cells. 
+
+The gather() function, or alternatively pivot_wider() function allows us to convert to this format, but if we try it for the entire 671x9066 matrix, it will crash R. So let's look at the matrix for 7 users and top 5 most rated movies:
+
+```{r}
+#to identify the top 5 movies first use count() function to count unique number of movies using their Id numbers, and then select the top 5 by using the top_n() function. Both functions are from the dplyr package
+keep <- movielens %>% 
+  count(movieId) %>%
+  top_n(5) %>%
+  pull(movieId)
+
+#choose 7 random users, in this case lets say users from 13 to 20, and create a tidy matrix
+
+tab <- movielens %>%
+  filter(userId %in% c(13:20)) %>%
+  filter(movieId %in% keep) %>%
+  select(userId, title, rating) %>%
+  #spread(title, rating)
+  pivot_wider(names_from = title, 
+              values_from = rating) #if we don't use pivot_wider() function (this function supersedes spread() function that was previously used) from the tidyr package the resulting matrix will have the same output format as movielens - ie, each row represents one rating given by one user to one movie. This means, without pivot_wider, rows would list users and their ratings for each movie before doing the same for the next user and so on. 
+tab
+```
+
