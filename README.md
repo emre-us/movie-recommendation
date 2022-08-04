@@ -13,12 +13,10 @@ tidyverse for tidy data <br>
 gridExtra for grid arrangement of graphs <br>
 dplyr for data wrangling <br>
 ggplot2 for visualisations<br>
-caret for machine learning, for resampling and model training, including kNN <br>
+caret for machine learning, for resampling and model training <br>
 
 
-randomForest for carrying out random forest<br>
-and <br>
-matrixStats as an option for calculating matrix statistics (eg rowSds, colSds)
+It incorporates movie and user biases / effects, and regularisation.
 
 The movielens data by GroupLens reearch project can be found here: https://grouplens.org/datasets/movielens/ 
 
