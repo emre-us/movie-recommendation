@@ -16,7 +16,7 @@ ggplot2 for visualisations<br>
 caret for machine learning, for resampling and model training <br>
 
 
-It incorporates movie and user biases / effects, and regularisation.
+It incorporates movie and user biases / effects, regularisation, and matrix factorisation.
 
 The movielens data by GroupLens reearch project can be found here: https://grouplens.org/datasets/movielens/ 
 
