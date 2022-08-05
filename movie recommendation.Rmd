@@ -11,6 +11,7 @@ library(gridExtra) # to plot graphs in a grid, or next to each other
 library(dplyr) # for data manipulation
 library(ggplot2) #for visualisations
 library(caret) # for ML, resampling and model training
+library(ggrepel) #for ensuring labels don't overlap in plots
 
 library(dslabs) # for the movielens data
 data("movielens") # load-up the movielens data
@@ -668,3 +669,214 @@ Here we use matrix factorisation.
 
 
 ### Factor Analysis
+
+We want to predict the residuals $r_{u,i}$ using some structure. Here is a simulation to illustrate the idea. 
+
+Suppose our residuals 'r' look like this where we create a vector q that assigns 1 to gangster movies and -1 to romantic comedies. We also create a vector p that reduces the users to three types: those that like gangster movies and dislike romantic comedies (coded as 2), those that like romcoms but dislike gangster movies (coded as -2), and those that don't care (coded as 0).
+
+```{r}
+q <- matrix(c(1 , 1, 1, -1, -1), ncol = 1)
+rownames(q) <- c(m_1, m_2, m_3, m_4, m_5)
+p <- matrix(rep(c(2, 0, -2), c(3, 5, 4)), ncol = 1)
+rownames(p) <- 1:nrow(p)
+
+set.seed(1988)
+r <- jitter(p %*% t(q))
+
+round(r, 1)
+```
+
+There seems to be a pattern in this simulation which is based on what we saw with real data. There is a gangster movie effect and there is a romantic comedy effect. we can check the correlation patterns:
+
+```{r}
+cor(r)
+```
+
+The main point here is that we can almost reconstruct r, which has 60 values (12 x 5), with two vectors totaling 17 values (q has 5 values and p has 12). These two vectors can be used to form the matrix with with 60 values instead.
+
+If $r$ contains the residuals for users $u=1,\dots,12$ for movies $i=1,\dots,5$ we can write the following mathematical formula for our residuals $r_{u,i}$.
+
+$$
+r_{u,i} \approx p_u q_i 
+$$
+
+This implies that we can explain more variability by modifying our previous model for movie recommendations to:
+
+$$
+Y_{u,i} = \mu + b_i + b_u + p_u q_i + \varepsilon_{u,i}
+$$
+
+
+However, we motivated the need for the $p_u q_i$ term with a simple simulation. The structure found in data is usually more complex. For example, in this first simulation we assumed there were was just one factor $p_u$ that determined which of the two genres movie $u$ belongs to. But the structure in our movie data seems to be much more complicated than gangster movie versus romance. We may have many other factors. Here we present a slightly more complex simulation. We now add a sixth movie.
+
+```{r}
+set.seed(1988)
+
+m_6 <- "Scent of a Woman"
+q <- cbind(c(1 , 1, 1, -1, -1, -1), 
+           c(1 , 1, -1, -1, -1, 1))
+rownames(q) <- c(m_1, m_2, m_3, m_4, m_5, m_6)
+p <- cbind(rep(c(2,0,-2), c(3,5,4)), 
+          c(-1,1,1,0,0,1,1,1,0,-1,-1,-1))/2
+rownames(p) <- 1:nrow(p)
+
+r <- jitter(p %*% t(q), factor=1)
+
+round(r, 1)
+```
+
+We can see another factor - a factor that divides users into those that love, hate, or don't care for Al Pacino. We can see this complication in the correlation structure:
+
+```{r}
+cor(r)
+```
+
+We note that we perhaps need a second factor to account for the fact that some users like Al Pacino, while others dislike him or don't care. Notice that the overall structure of the correlation obtained from the simulated data is not that far off the real correlation:
+
+```{r}
+x <- y[ , c(m_1, m_2, m_3, m_4, m_5, m_6)]
+cor(x, use = "pairwise.complete")
+```
+
+To explain the structure we need two factors:
+
+```{r}
+t(q)
+```
+
+With the first factor (the first row) used to code the gangster versus romance groups and a second factor (the second row) to explain the Al Pacino versus no Al Pacino groups. We will also need two sets of coefficients to explain the variability introduced by the $3\times 3$ types of groups:
+
+```{r}
+t(p)
+```
+
+The model with two factors has 36 parameters (q has 12, p has 24) that can be used to explain much of the variability in the 72 ratings:
+
+$$
+Y_{u,i} = \mu + b_i + b_u + p_{u,1} q_{1,i} + p_{u,2} q_{2,i} + \varepsilon_{u,i}
+$$
+
+Note that in an actual data application, we need to fit this model to data. To explain the complex correlation we observe in real data, we usually permit the entries of $p$ and $q$ to be continuous values, rather than discrete ones as we used in the simulation. For example, rather than dividing movies into gangster or romance, we define a continuum. 
+
+Also note that this is not a linear model and to fit it we need to use an algorithm other than the one used by `lm` to find the parameters that minimize the least squares. The winning algorithms for the Netflix challenge fit a model similar to the above and used regularization to penalize for large values of $p$ and $q$, rather than using least squares, in addition to penalising user and movie effects. However, implementing this approach is beyond this project (and beyond the "Introduction to Data Science Book").
+
+In reality, if we want to find the structure using the data as opposed to constructing it ourselves as we just did, we need to fit the models to data. This means we need to figure out how to estimate factors from the data as opposed to defining ourselves.
+
+One way to do this is to fit models, but we can also use Principal Component Analysis (PCA) or equivalently the Singular Value Decomposition (SVD) to estimates factors from data.
+
+
+
+### Singular Value Decomposition (SVD) and Principal Component Analysis (PCA)
+
+The matrix decomposition:
+
+$$
+r_{u,i} \approx p_{u,1} q_{1,i} + p_{u,2} q_{2,i}
+$$
+
+is very much related to SVD and PCA. SVD and PCA are complicated concepts, but one way to understand them is that SVD is an algorithm that finds the vectors $p$ and $q$ that permit us to rewrite the matrix $\mbox{r}$ with $m$ rows and $n$ columns as:
+
+$$
+r_{u,i} = p_{u,1} q_{1,i} + p_{u,2} q_{2,i} + \dots + p_{u,n} q_{n,i} 
+$$
+
+with the variability of each term decreasing and with the $p$s uncorrelated. The algorithm also computes this variability so that we can know how much of the matrices, total variability is explained as we add new terms. This may permit us to see that, with just a few terms, we can explain most of the variability.
+
+Let's see an example with the movie data. To compute the decomposition, we will make the residuals with NAs equal to 0:
+
+```{r}
+y[is.na(y)] <- 0
+pca <- prcomp(y)
+```
+
+The $q$ vectors are called the principal components and they are stored in this matrix:
+
+```{r}
+dim(pca$rotation)
+```
+
+While the $p$, or the user effects, are here:
+
+```{r}
+dim(pca$x)
+```
+
+We can see the variability of each of the vectors:
+
+```{r}
+qplot(1:nrow(x),
+      pca$sdev,
+      xlab = "PC")
+```
+
+and we can see that the first few principal components explain a large percent:
+
+```{r}
+#var explained PCA
+
+var_explained <- cumsum(pca$sdev^2 / sum(pca$sdev^2))
+qplot(1:nrow(x), var_explained, xlab = "PC")
+```
+
+We also notice that the first two principal components are related to the structure in opinions about movies:
+
+```{r}
+pcs <- data.frame(pca$rotation,
+                  name = str_trunc(colnames(y),
+                                   30),
+                  stringsAsFactors = FALSE)
+
+highlight <- filter(pcs, PC1 < -0.1 | PC1 > 0.1 | PC2 < -0.075 | PC2 > 0.1)
+
+pcs %>% ggplot(aes(PC1, PC2)) + 
+  geom_point() + geom_text_repel(aes(PC1, PC2, label = name),
+                                 data = highlight,
+                                 size = 2)
+```
+
+Just by looking at the top 10 in each direction, we see a meaningful pattern. The first PC shows the difference between critically acclaimed movies on one side:
+
+```{r}
+# critically acclaimed movies:
+
+pcs %>%
+  select(name, PC1) %>%
+  arrange(PC1) %>%
+  slice(1:10) %>%
+  pull(name)
+
+```
+
+and Hollywood blockbusters on the other:
+
+```{r}
+pcs %>%
+  select(name, PC1) %>%
+  arrange(desc(PC1)) %>%
+  slice(1:10) %>%
+  pull(name)
+```
+
+While the second PC seems to go from artsy, independent films:
+
+```{r}
+pcs %>%
+  select(name, PC2) %>%
+  arrange(PC2) %>%
+  slice(1:10) %>%
+  pull(name)
+```
+
+to nerd favourites:
+
+```{r}
+pcs %>%
+  select(name, PC2) %>%
+  arrange(desc(PC2)) %>%
+  slice(1:10) %>%
+  pull(name)
+```
+
+So, using PCA, we've shown that a matrix factorisation approach can find important structure in our data. 
+
+To actually fit the matrix factorisation model that has been presented earlier that takes into account that there is missing data, that there is missing cells in the matrix, is a bit more complicated. For those interested in implementing that incorporates these ideas, __recommenderlab__ package can be used.

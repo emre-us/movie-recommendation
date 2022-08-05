@@ -12,11 +12,12 @@ dslabs for the subset of movielens data <br>
 tidyverse for tidy data <br>
 gridExtra for grid arrangement of graphs <br>
 dplyr for data wrangling <br>
-ggplot2 for visualisations<br>
+ggplot2 for visualisations <br>
+ggrepel for ensuring labels in plots don't overlap <br>
 caret for machine learning, for resampling and model training <br>
 
 
-It incorporates movie and user biases / effects, regularisation, and matrix factorisation.
+It incorporates movie and user biases / effects, regularisation, and matrix factorisation (incl SVD & PCA).
 
 The movielens data by GroupLens reearch project can be found here: https://grouplens.org/datasets/movielens/ 
 
